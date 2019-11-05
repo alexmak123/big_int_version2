@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_layout_file>
+	<ActiveTarget name="Debug" />
+	<File name="main.c" open="1" top="1" tabpos="1" split="0" active="1" splitpos="0" zoom_1="-2" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="8026" topLine="89" />
+		</Cursor>
+		<Folding>
+			<Collapse line="40" />
+			<Collapse line="62" />
+			<Collapse line="137" />
+			<Collapse line="200" />
+		</Folding>
+	</File>
+	<File name="bn.h" open="1" top="0" tabpos="3" split="0" active="1" splitpos="0" zoom_1="-1" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="923" topLine="0" />
+		</Cursor>
+	</File>
+	<File name="bn_Makarchuk.c" open="1" top="0" tabpos="2" split="0" active="1" splitpos="0" zoom_1="-1" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="10017" topLine="30" />
+		</Cursor>
+		<Folding>
+			<Collapse line="13" />
+			<Collapse line="33" />
+			<Collapse line="55" />
+			<Collapse line="107" />
+			<Collapse line="161" />
+			<Collapse line="170" />
+			<Collapse line="191" />
+		</Folding>
+	</File>
+</CodeBlocks_layout_file>

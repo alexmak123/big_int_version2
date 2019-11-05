@@ -1,0 +1,16 @@
+# depslib dependency file v1.0
+1572971711 source:d:\mipt\1sem\proga\project\my_big_int\bn_makarchuk.c
+	<stdio.h>
+	<stdlib.h>
+	<math.h>
+	<string.h>
+	<malloc.h>
+
+1572971678 source:d:\mipt\1sem\proga\project\my_big_int\main.c
+	<stdio.h>
+	<stdlib.h>
+	<assert.h>
+	"bn.h"
+
+1572964164 d:\mipt\1sem\proga\project\my_big_int\bn.h
+
