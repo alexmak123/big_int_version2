@@ -4,8 +4,8 @@
 #include <string.h>
 #include <malloc.h>
 #include <locale.h>
-
-int max_size = 20000;
+//#include "bn.h"
+int max_size = 50000;
 
 /*1) representation: an array of digits in decimal notation, written in reverse order and separately sign in the structure*/
 struct bn_s {
@@ -16,7 +16,7 @@ struct bn_s {
 typedef struct bn_s bn;
 
 //print our structure, can be printed with leading zeros if we do not delete them
-void print_bn (const bn *r, int max_size) {
+void my_bn_to_string(char *res, const bn *r, int max_size) {
     if (r -> sign == 0) {
         printf("-");
     }
@@ -25,7 +25,7 @@ void print_bn (const bn *r, int max_size) {
         j--;
     }
     for (int i = j; i >= 0; i--) {
-        printf("%d", r -> body[i]);
+        res[j - i] = r -> body[i] + '0';
     }
 }
 
@@ -103,6 +103,44 @@ int abs_bn_add_to(bn *t, bn const *right) {
     return 0;
 }
 
+// Initialize the value of bn with the decimal representation of the string
+int bn_init_string(bn *t, const char *init_string) {
+    // pointer is not working
+    if (t == NULL) {
+        return 1;
+    }
+    //pointer is not working
+    if (init_string == NULL) {
+        return 1;
+    }
+    int p = strlen(init_string), i = 0;
+    //we know that memory is not allocated, that is why we need to allocate it
+    t -> body = malloc(sizeof (int) * max_size);
+    //pointer is not working
+    if (t -> body == NULL) {
+        return 1;
+    }
+    init_with_zeroes(t, max_size);
+    if (init_string[0] == '-') {
+        t -> sign = 0;
+        for (int j = 0; j < p; j++) {
+            if (p - i - 1 == 0) {
+                break;
+            }
+            t -> body[j] = init_string[p - i - 1] - '0';
+            i++;
+        }
+    }
+    else {
+        t -> sign = 1;
+        for (int j = 0; j < p; j++) {
+            t -> body[j] = init_string[p - i - 1] - '0';
+            i++;
+        }
+    }
+    return 0;
+}
+
 int main()
 {
     int n;
@@ -116,6 +154,8 @@ int main()
         a = b;
         b = temp;
     }
-    print_bn(b, 20000);
+    char *res = malloc(sizeof(char) * 50000);
+    my_bn_to_string(res, b, 50000);
+    printf("%s", res);
     return 0;
 }

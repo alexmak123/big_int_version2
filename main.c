@@ -37,7 +37,7 @@ struct bn_s {
 };
 
 //print our structure, can be printed with leading zeros if we do not delete them
-void print_bn (const bn *r, int max_size) {
+void my_bn_to_string(char *res, const bn *r, int max_size) {
     if (r -> sign == 0) {
         printf("-");
     }
@@ -46,7 +46,7 @@ void print_bn (const bn *r, int max_size) {
         j--;
     }
     for (int i = j; i >= 0; i--) {
-        printf("%d", r -> body[i]);
+        res[j - i] = r -> body[i] + '0';
     }
 }
 
@@ -63,6 +63,8 @@ int main()
         a = b;
         b = temp;
     }
-    print_bn(b, 50000);
+    char *res = malloc(sizeof(char) * 50000);
+    my_bn_to_string(res, b, 50000);
+    printf("%s", res);
     return 0;
 }
