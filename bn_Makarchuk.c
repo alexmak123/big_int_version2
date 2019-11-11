@@ -123,7 +123,7 @@ bn *bn_init(bn const *orig) {
         return NULL;
     }
     t -> body = malloc(sizeof(int) * MAX_SIZE);
-        if (t -> body == NULL) {
+    if (t -> body == NULL) {
         free(t);
         return NULL;
     }
@@ -155,21 +155,27 @@ int bn_init_int(bn *t, int init_int) {
     return 0;
 }
 
-/*// Initialize the value of BN with the decimal representation of the string
+// Initialize the value of BN with the decimal representation of the string
 int bn_init_string(bn *t, const char *init_string) {
     set_zero(t);
     int p = strlen(init_string), i = 0;
     if (init_string[0] == '-') {
-        t -> is_neg = 1;
-        for (int j = 0; j < p; j++) {
-            if (p - i - 1 == 0) {
-                break;
-            }
-            t -> body[j] = init_string[p - i - 1] - '0';
-            i++;
-        }
+       t -> is_neg = 1;
+       t -> size = (p - 1) / NUM_DIGITS;
+       if (p % NUM_DIGITS != 0) {
+            t -> size += 1;
+       }
+
     }
-}*/
+    else {
+        t -> is_neg = 0;
+        t -> size = p / NUM_DIGITS;
+        if (p % NUM_DIGITS != 0) {
+            t -> size += 1;
+        }
+
+    }
+}
 
 // operation x += y by absolute value, ignores the sign
 // assumes that pointers are valid
@@ -269,8 +275,12 @@ int bn_add_to(bn *t, bn const *right) {
     else {
         bn *temp = bn_init(right);
         abs_bn_sub_to(temp, t);
-        //bn_delete(t);
-        t = temp;
+        t -> is_neg = temp -> is_neg;
+        t -> size = temp -> size;
+        for (int i = 0; i < MAX_SIZE; i++) {
+            t -> body[i] = temp -> body[i];
+        }
+        bn_delete(temp);
     }
     return 0;
 }
@@ -300,19 +310,7 @@ bn* bn_sub(bn const *left, bn const *right) {
 
 /*int main()
 {
-    int n;
-    scanf("%d", &n);
-    bn *a = bn_new(), *b = bn_new();
-    bn_init_int(a, 1000);
-    bn_init_int(b, 1);
-    abs_bn_sub_to(a, b);
-    char *res = bn_to_string(a);
-    //we have a problem during valgrind compilation because it thinks that we can have res == NULL when we printf it
-    printf("%s\n", res);
-    free(res);
-    bn_delete(a);
-    bn_delete(b);
-    return 0;
+
 }*/
 
 
