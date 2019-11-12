@@ -23,6 +23,13 @@ struct bn_s {
 
 typedef struct bn_s bn;
 
+int max(int a, int b) {
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
 int bn_delete(bn *t) {
     t -> size = 0;
     t -> is_neg = 0;
@@ -68,12 +75,13 @@ int *convert_to_base_10(const bn *t) {
 
 // returns a string representation of bn
 char *my_bn_to_string(const bn *t) {
-    // allocate enough to fit number and maybe the minus sign
-    char *res = calloc(((t -> size) * NUM_DIGITS + 1), sizeof(char));
 
     if (t -> size == 0) {
         return "0";
     }
+
+    // allocate enough to fit number and maybe the minus sign
+    char *res = calloc(((t -> size) * NUM_DIGITS + 1), sizeof(char));
 
     int i = 0;
     if (t -> is_neg) {
@@ -155,28 +163,6 @@ int bn_init_int(bn *t, int init_int) {
     return 0;
 }
 
-// Initialize the value of BN with the decimal representation of the string
-int bn_init_string(bn *t, const char *init_string) {
-    set_zero(t);
-    int p = strlen(init_string), i = 0;
-    if (init_string[0] == '-') {
-       t -> is_neg = 1;
-       t -> size = (p - 1) / NUM_DIGITS;
-       if (p % NUM_DIGITS != 0) {
-            t -> size += 1;
-       }
-
-    }
-    else {
-        t -> is_neg = 0;
-        t -> size = p / NUM_DIGITS;
-        if (p % NUM_DIGITS != 0) {
-            t -> size += 1;
-        }
-
-    }
-}
-
 // operation x += y by absolute value, ignores the sign
 // assumes that pointers are valid
 int abs_bn_add_to(bn *t, bn const *right) {
@@ -190,7 +176,8 @@ int abs_bn_add_to(bn *t, bn const *right) {
         if (digit >= MOD) {
             additional_one = 1;
             digit -= MOD;
-        } else {
+        }
+        else {
             additional_one = 0;
         }
         t -> body[i] = digit;
@@ -209,7 +196,7 @@ int abs_bn_add_to(bn *t, bn const *right) {
 int abs_bn_sub_to(bn *t, bn const *right) {
     int minus_one = 0;
     int i = 0;
-    while (i < t -> size || i < right -> size) {
+    while (i < t -> size) {
         int digit = t -> body[i] - right -> body[i];
         if (minus_one) {
             digit--;
@@ -218,7 +205,8 @@ int abs_bn_sub_to(bn *t, bn const *right) {
             minus_one = 1;
             digit += MOD;
 
-        } else {
+        }
+        else {
             minus_one = 0;
         }
         t -> body[i] = digit;
@@ -268,6 +256,7 @@ int bn_add_to(bn *t, bn const *right) {
     // different signs
     if (comp == 0) {
         set_zero(t);
+        return 0;
     }
     if (comp == 1) {
         abs_bn_sub_to(t, right);
@@ -308,9 +297,145 @@ bn* bn_sub(bn const *left, bn const *right) {
     return temp;
 }
 
+// initialize the value of BN with the decimal representation of the string
+int bn_init_string(bn *t, const char *init_string) {
+    set_zero(t);
+    int p = strlen(init_string);
+    int string_start = 0;
+    if (init_string[0] == '-') {
+        t -> is_neg = 1;
+        p -= 1;
+        // actual number starts from 1
+        string_start = 1;
+    }
+    else {
+        t -> is_neg = 0;
+    }
+
+    t -> size = p / NUM_DIGITS;
+    if (p % NUM_DIGITS != 0) {
+        t -> size += 1;
+    }
+
+    // string index - up to NUM_DIGITS before it belong to cell
+    // can be less then NUM_DIGITS if it is last cell
+    int string_i = strlen(init_string);
+    int cell_i = 0;
+    while (string_i >= string_start) {
+        int cell = 0;
+        for (int i = string_i - NUM_DIGITS; i < string_i; i++) {
+            if (i < string_start) {
+                // last cell that has less then NUM_DIGITS, skip some of them
+                continue;
+            }
+            cell *= 10;
+            cell += init_string[i] - '0';
+        }
+        string_i -= NUM_DIGITS;
+
+        t -> body[cell_i] = cell;
+        cell_i++;
+    }
+
+    return 0;
+}
+
+/*// operation x * value
+int mul_bn_to_const(bn *t, int value) {
+    // where to put numbers like 999 999 999 * 999 999 999??? they do not fit in unsigned long long int
+    int additional = 0;
+    int i = 0;
+    while (i < t -> size) {
+        unsigned long long int digit = t -> body[i] * value;
+        if (additional != 0) {
+            digit += additional;
+        }
+        if (digit >= MOD) {
+            additional = digit / MOD;
+            digit %= MOD;
+        }
+        else {
+            additional = 0;
+        }
+        t -> body[i] = digit;
+        i++;
+    }
+    if (additional != 0) {
+        t -> body[i] = additional;
+        t -> size++;
+    }
+    return 0;
+}*/
+
+// operation x = l * r where both are more than zero
+bn *abs_bn_mul(bn const *left, bn const *right) {
+    bn *temp = bn_new();
+    int length = left -> size + right -> size + 1;
+    for (int i = 0; i < left -> size; i++) {
+        for (int j = 0; j < right -> size; j++) {
+            temp -> body[i + j - 1] += left -> body[i] * right -> body[j];
+        }
+    }
+    for (int i = 0; i < length; i++) {
+        temp -> body[i + 1] += temp -> body[i] / MOD;
+        temp -> body[i] %= MOD;
+    }
+    resize_t_excluding_zeros(temp);
+    return temp;
+}
+
+// operation x = l * r
+bn* bn_mul(bn const *left, bn const *right) {
+    bn *temp = abs_bn_mul(left, right);
+    if (left -> is_neg == right -> is_neg) {
+        temp -> is_neg = 0;
+    }
+    else {
+        temp -> is_neg = 1;
+    }
+    return temp;
+}
+
+// operation x *= y
+int bn_mul_to(bn *t, bn const *right) {
+    bn *temp = bn_mul(t, right);
+    t -> is_neg = temp -> is_neg;
+    t -> size = temp -> size;
+    for (int i = 0; i < MAX_SIZE; i++) {
+        t -> body[i] = temp -> body[i];
+    }
+    bn_delete(temp);
+    return 0;
+}
+
 /*int main()
 {
-
+    char *a = malloc(sizeof(char) * 100000);
+    char *b = malloc(sizeof(char) * 100000);
+    char symbol;
+    scanf("%s", a);
+    scanf("\n %c \n", &symbol);
+    scanf("%s", b);
+    bn *first = bn_new();
+    bn *second = bn_new();
+    bn *res = first;
+    bn_init_string(first, a);
+    bn_init_string(second, b);
+    if (symbol == '*') {
+        res = abs_bn_mul(first, second);
+    }
+    char *otv = my_bn_to_string(res);
+    printf("%s\n", otv);
+    if (res -> size != 0) {
+        free(otv);
+    }
+    free(a);
+    free(b);
+    bn_delete(first);
+    bn_delete(second);
+    bn_delete(res);
+    return 0;
 }*/
+
 
 
