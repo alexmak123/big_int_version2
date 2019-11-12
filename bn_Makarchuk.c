@@ -14,7 +14,7 @@ const int NUM_DIGITS = 9;
 
 struct bn_s {
     // our body
-    int *body;
+    unsigned long long int *body;
     // number of cells that create number, without leading zeros; if bigint is zero, then it would be zero
     int size;
     // 0 if number is positive, 1 if negative
@@ -57,13 +57,13 @@ void set_zero(bn *t) {
 
 // convert from base MOD to base 10
 // both representations are in reverse order
-int *convert_to_base_10(const bn *t) {
+unsigned long long int *convert_to_base_10(const bn *t) {
     // allocate enough memory to fit digits in new base
-    int *base_10 = calloc((t -> size) * NUM_DIGITS, sizeof(int));
+    unsigned long long int *base_10 = calloc((t -> size) * NUM_DIGITS, sizeof(unsigned long long int));
 
     int offset = 0;
     for (int i = 0; i < t -> size; i++) {
-        int digit = t -> body[i];
+        unsigned long long int digit = t -> body[i];
         for (int j = 0; j < NUM_DIGITS; j++) {
             base_10[offset] = digit % 10;
             digit /= 10;
@@ -89,7 +89,7 @@ char *my_bn_to_string(const bn *t) {
         i = 1;
     }
 
-    int *base_10 = convert_to_base_10(t);
+    unsigned long long int *base_10 = convert_to_base_10(t);
 
     // remove leading zeros
     int j = (t -> size) * NUM_DIGITS - 1;
@@ -115,7 +115,7 @@ bn *bn_new() {
         return NULL;
     }
     t -> is_neg = 0;
-    t -> body = malloc(sizeof(int) * MAX_SIZE);
+    t -> body = malloc(sizeof(unsigned long long int) * MAX_SIZE);
     if (t -> body == NULL) {
         free(t);
         return NULL;
@@ -130,7 +130,7 @@ bn *bn_init(bn const *orig) {
     if (t == NULL) {
         return NULL;
     }
-    t -> body = malloc(sizeof(int) * MAX_SIZE);
+    t -> body = malloc(sizeof(unsigned long long int) * MAX_SIZE);
     if (t -> body == NULL) {
         free(t);
         return NULL;
@@ -169,7 +169,7 @@ int abs_bn_add_to(bn *t, bn const *right) {
     int additional_one = 0;
     int i = 0;
     while (i < t -> size || i < right -> size) {
-        int digit = t -> body[i] + right -> body[i];
+        unsigned long long int digit = t -> body[i] + right -> body[i];
         if (additional_one) {
             digit++;
         }
@@ -197,7 +197,7 @@ int abs_bn_sub_to(bn *t, bn const *right) {
     int minus_one = 0;
     int i = 0;
     while (i < t -> size) {
-        int digit = t -> body[i] - right -> body[i];
+        unsigned long long int digit = t -> body[i] - right -> body[i];
         if (minus_one) {
             digit--;
         }
@@ -322,7 +322,7 @@ int bn_init_string(bn *t, const char *init_string) {
     int string_i = strlen(init_string);
     int cell_i = 0;
     while (string_i >= string_start) {
-        int cell = 0;
+        unsigned long long int cell = 0;
         for (int i = string_i - NUM_DIGITS; i < string_i; i++) {
             if (i < string_start) {
                 // last cell that has less then NUM_DIGITS, skip some of them
@@ -340,40 +340,14 @@ int bn_init_string(bn *t, const char *init_string) {
     return 0;
 }
 
-/*// operation x * value
-int mul_bn_to_const(bn *t, int value) {
-    // where to put numbers like 999 999 999 * 999 999 999??? they do not fit in unsigned long long int
-    int additional = 0;
-    int i = 0;
-    while (i < t -> size) {
-        unsigned long long int digit = t -> body[i] * value;
-        if (additional != 0) {
-            digit += additional;
-        }
-        if (digit >= MOD) {
-            additional = digit / MOD;
-            digit %= MOD;
-        }
-        else {
-            additional = 0;
-        }
-        t -> body[i] = digit;
-        i++;
-    }
-    if (additional != 0) {
-        t -> body[i] = additional;
-        t -> size++;
-    }
-    return 0;
-}*/
-
 // operation x = l * r where both are more than zero
 bn *abs_bn_mul(bn const *left, bn const *right) {
     bn *temp = bn_new();
     int length = left -> size + right -> size + 1;
+    temp -> size = length;
     for (int i = 0; i < left -> size; i++) {
         for (int j = 0; j < right -> size; j++) {
-            temp -> body[i + j - 1] += left -> body[i] * right -> body[j];
+            temp -> body[i + j] += left -> body[i] * right -> body[j];
         }
     }
     for (int i = 0; i < length; i++) {
@@ -408,7 +382,7 @@ int bn_mul_to(bn *t, bn const *right) {
     return 0;
 }
 
-/*int main()
+int main()
 {
     char *a = malloc(sizeof(char) * 100000);
     char *b = malloc(sizeof(char) * 100000);
@@ -422,7 +396,7 @@ int bn_mul_to(bn *t, bn const *right) {
     bn_init_string(first, a);
     bn_init_string(second, b);
     if (symbol == '*') {
-        res = abs_bn_mul(first, second);
+        res = bn_mul(first, second);
     }
     char *otv = my_bn_to_string(res);
     printf("%s\n", otv);
@@ -435,7 +409,7 @@ int bn_mul_to(bn *t, bn const *right) {
     bn_delete(second);
     bn_delete(res);
     return 0;
-}*/
+}
 
 
 
