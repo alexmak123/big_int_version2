@@ -23,7 +23,7 @@ struct bn_s {
 
 typedef struct bn_s bn;
 
-int max(int a, int b) {
+unsigned long long int max(unsigned long long int a, unsigned long long int b) {
     if (a > b) {
         return a;
     }
@@ -371,7 +371,7 @@ bn* bn_mul(bn const *left, bn const *right) {
 }
 
 // operation x *= y
-int bn_mul_to(bn *t, bn const *right) {
+int bn_mul_to(bn *t, bn *right) {
     bn *temp = bn_mul(t, right);
     t -> is_neg = temp -> is_neg;
     t -> size = temp -> size;
@@ -382,7 +382,65 @@ int bn_mul_to(bn *t, bn const *right) {
     return 0;
 }
 
-int main()
+// operation bn *t /= number
+void divide_bn_on_number (bn *t, int const num) {
+    for (int i = t -> size - 1; i >= 0; i--) {
+        if (i) {
+            t -> body[i - 1] += (t -> body[i] % num) * MOD;
+        }
+        t -> body[i] /= num;
+    }
+    resize_t_excluding_zeros(t);
+}
+
+// operation to find square root
+bn *square_root(bn *left, bn *right, bn const *t) {
+    bn *mid = bn_add(left, right);
+    divide_bn_on_number(mid, 2);
+    bn *one = bn_new();
+    bn_init_int(one, 1);
+    bn *mid_plus_one = bn_add(mid, one);
+    // make square mid_plus_one and mid
+    bn *square_mid = bn_mul(mid, mid);
+    bn *square_mid_plus_one = bn_mul(mid_plus_one, mid_plus_one);
+    if (abs_bn_cmp(square_mid_plus_one, t) < 0) {
+        bn_delete(mid_plus_one);
+        bn_delete(square_mid_plus_one);
+        bn_delete(square_mid);
+        bn_delete(one);
+        //bn_delete(left);
+        square_root(mid, right, t);
+    }
+    else if (abs_bn_cmp(square_mid, t) > 0) {
+        bn_delete(mid_plus_one);
+        bn_delete(square_mid_plus_one);
+        bn_delete(square_mid);
+        bn_delete(one);
+        //bn_delete(right);
+        square_root(left, mid, t);
+    }
+    else {
+        return mid;
+    }
+}
+
+
+int main () {
+    char *a = malloc(sizeof(char) * 100000);
+    bn *first = bn_new();
+    bn *second = bn_new();
+    //int symbol;
+    scanf("%s", a);
+    //scanf("%d", &symbol);
+    bn_init_string(second, a);
+    bn *third = bn_init(second);
+    bn *res = square_root(first, second, third);
+    char *otv = my_bn_to_string(res);
+    printf("%s\n", otv);
+    return 0;
+}
+
+/*int main()
 {
     char *a = malloc(sizeof(char) * 100000);
     char *b = malloc(sizeof(char) * 100000);
@@ -409,7 +467,7 @@ int main()
     bn_delete(second);
     bn_delete(res);
     return 0;
-}
+}*/
 
 
 
