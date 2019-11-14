@@ -5,16 +5,9 @@
 #include <string.h>
 #include <locale.h>
 
-// enough to fit in 100000 symbols
-const int MAX_SIZE = 12000;
-// numeric system
-const int MOD = 1000000000;
-// max amount of digits in one cell of our massive body
-const int NUM_DIGITS = 9;
-
 struct bn_s {
     // our body
-    unsigned long long int *body;
+    int *body;
     // number of cells that create number, without leading zeros; if bigint is zero, then it would be zero
     int size;
     // 0 if number is positive, 1 if negative
@@ -22,8 +15,16 @@ struct bn_s {
 };
 
 typedef struct bn_s bn;
+typedef unsigned long long int my_ulong;
 
-unsigned long long int max(unsigned long long int a, unsigned long long int b) {
+// enough to fit in 100000 symbols
+const int MAX_SIZE = 12000;
+// numeric system
+const int MOD = 100000000;
+// max amount of digits in one cell of our massive body
+const int NUM_DIGITS = 8;
+
+int max(int a, int b) {
     if (a > b) {
         return a;
     }
@@ -39,11 +40,13 @@ int bn_delete(bn *t) {
     return 0;
 }
 
-//remove zeros from the end
-void resize_t_excluding_zeros (bn *t) {
-    while (t -> body[t -> size - 1] == 0) {
-        t -> size -= 1;
+// recalculates size of t by skipping leading zeros
+void recalculate_bn_size(bn *t) {
+    int i = MAX_SIZE - 1;
+    while (i >= 0 && t -> body[i] == 0) {
+        i--;
     }
+    t -> size = i + 1;
 }
 
 // sets bigint value to zero
@@ -57,13 +60,13 @@ void set_zero(bn *t) {
 
 // convert from base MOD to base 10
 // both representations are in reverse order
-unsigned long long int *convert_to_base_10(const bn *t) {
+int *convert_to_base_10(const bn *t) {
     // allocate enough memory to fit digits in new base
-    unsigned long long int *base_10 = calloc((t -> size) * NUM_DIGITS, sizeof(unsigned long long int));
+    int *base_10 = calloc((t -> size) * NUM_DIGITS, sizeof(int));
 
     int offset = 0;
     for (int i = 0; i < t -> size; i++) {
-        unsigned long long int digit = t -> body[i];
+        int digit = t -> body[i];
         for (int j = 0; j < NUM_DIGITS; j++) {
             base_10[offset] = digit % 10;
             digit /= 10;
@@ -75,7 +78,6 @@ unsigned long long int *convert_to_base_10(const bn *t) {
 
 // returns a string representation of bn
 char *my_bn_to_string(const bn *t) {
-
     if (t -> size == 0) {
         return "0";
     }
@@ -89,7 +91,7 @@ char *my_bn_to_string(const bn *t) {
         i = 1;
     }
 
-    unsigned long long int *base_10 = convert_to_base_10(t);
+    int *base_10 = convert_to_base_10(t);
 
     // remove leading zeros
     int j = (t -> size) * NUM_DIGITS - 1;
@@ -108,14 +110,14 @@ char *my_bn_to_string(const bn *t) {
     return res;
 }
 
-// create a new bn that represents zero
+// create a new bn that equals zero
 bn *bn_new() {
     bn *t = malloc(sizeof(bn));
     if (t == NULL) {
         return NULL;
     }
     t -> is_neg = 0;
-    t -> body = malloc(sizeof(unsigned long long int) * MAX_SIZE);
+    t -> body = malloc(sizeof(int) * MAX_SIZE);
     if (t -> body == NULL) {
         free(t);
         return NULL;
@@ -124,23 +126,20 @@ bn *bn_new() {
     return t;
 }
 
-// create existing bn with allocating memory
-bn *bn_init(bn const *orig) {
-    bn *t = malloc(sizeof(bn));
-    if (t == NULL) {
-        return NULL;
-    }
-    t -> body = malloc(sizeof(unsigned long long int) * MAX_SIZE);
-    if (t -> body == NULL) {
-        free(t);
-        return NULL;
-    }
-    set_zero(t);
+// copies content from orig into t
+// assumes that both bn have memory allocated
+void bn_copy(bn *t, bn const *orig) {
     t -> is_neg = orig -> is_neg;
     t -> size = orig -> size;
-    for (int i = 0; i < orig -> size; i++) {
+    for (int i = 0; i < MAX_SIZE; i++) {
         t -> body[i] = orig -> body[i];
     }
+}
+
+// return a copy of bn orig
+bn *bn_init(bn const *orig) {
+    bn *t = bn_new();
+    bn_copy(t, orig);
     return t;
 }
 
@@ -169,7 +168,7 @@ int abs_bn_add_to(bn *t, bn const *right) {
     int additional_one = 0;
     int i = 0;
     while (i < t -> size || i < right -> size) {
-        unsigned long long int digit = t -> body[i] + right -> body[i];
+        int digit = t -> body[i] + right -> body[i];
         if (additional_one) {
             digit++;
         }
@@ -197,7 +196,7 @@ int abs_bn_sub_to(bn *t, bn const *right) {
     int minus_one = 0;
     int i = 0;
     while (i < t -> size) {
-        unsigned long long int digit = t -> body[i] - right -> body[i];
+        int digit = t -> body[i] - right -> body[i];
         if (minus_one) {
             digit--;
         }
@@ -213,11 +212,11 @@ int abs_bn_sub_to(bn *t, bn const *right) {
         i++;
     }
     //resize excluding zeros
-    resize_t_excluding_zeros(t);
+    recalculate_bn_size(t);
     return 0;
 }
 
-// Comp by abs, if the left is less, return < 0; if equal, return 0; otherwise > 0
+// comp by abs, if the left is less, return < 0; if equal, return 0; otherwise > 0
 int abs_bn_cmp (bn const *left, bn const *right) {
     for (int i = MAX_SIZE - 1; i >= 0; i--) {
         if (left -> body[i] > right -> body[i]) {
@@ -230,7 +229,7 @@ int abs_bn_cmp (bn const *left, bn const *right) {
     return 0;
 }
 
-// If the left is less, return < 0; if equal, return 0; otherwise > 0
+// if the left is less, return < 0; if equal, return 0; otherwise > 0
 int bn_cmp(bn const *left, bn const *right) {
     if (left -> is_neg == 0 && right -> is_neg == 1) {
         return -1;
@@ -246,7 +245,7 @@ int bn_cmp(bn const *left, bn const *right) {
     }
 }
 
-// operation +=
+// operation t += right
 int bn_add_to(bn *t, bn const *right) {
     int comp = abs_bn_cmp(t, right);
     if (t -> is_neg == right -> is_neg) {
@@ -264,33 +263,28 @@ int bn_add_to(bn *t, bn const *right) {
     else {
         bn *temp = bn_init(right);
         abs_bn_sub_to(temp, t);
-        t -> is_neg = temp -> is_neg;
-        t -> size = temp -> size;
-        for (int i = 0; i < MAX_SIZE; i++) {
-            t -> body[i] = temp -> body[i];
-        }
+        bn_copy(t, temp);
         bn_delete(temp);
     }
     return 0;
 }
 
-// operation -=
+// operation t -= right
 int bn_sub_to(bn *t, bn const *right) {
-    bn *temp = bn_init(right);
-    temp -> is_neg = 1 - right -> is_neg;
-    bn_add_to(t, temp);
-    bn_delete(temp);
+    t -> is_neg = 1 - t -> is_neg;
+    bn_add_to(t, right);
+    t -> is_neg = 1 - t -> is_neg;
     return 0;
 }
 
-// operations x = l+r
+// operation x = left + right
 bn* bn_add(bn const *left, bn const *right) {
     bn *temp = bn_init(left);
     bn_add_to(temp, right);
     return temp;
 }
 
-// operations x = l-r
+// operations x = left - right
 bn* bn_sub(bn const *left, bn const *right) {
     bn *temp = bn_init(left);
     bn_sub_to(temp, right);
@@ -322,7 +316,7 @@ int bn_init_string(bn *t, const char *init_string) {
     int string_i = strlen(init_string);
     int cell_i = 0;
     while (string_i >= string_start) {
-        unsigned long long int cell = 0;
+        int cell = 0;
         for (int i = string_i - NUM_DIGITS; i < string_i; i++) {
             if (i < string_start) {
                 // last cell that has less then NUM_DIGITS, skip some of them
@@ -340,25 +334,32 @@ int bn_init_string(bn *t, const char *init_string) {
     return 0;
 }
 
-// operation x = l * r where both are more than zero
+// operation x = |left| * |right|
 bn *abs_bn_mul(bn const *left, bn const *right) {
-    bn *temp = bn_new();
     int length = left -> size + right -> size + 1;
-    temp -> size = length;
+
+    my_ulong *mult_res = calloc(length, sizeof(my_ulong));
+
     for (int i = 0; i < left -> size; i++) {
         for (int j = 0; j < right -> size; j++) {
-            temp -> body[i + j] += left -> body[i] * right -> body[j];
+            mult_res[i + j] += (my_ulong) left -> body[i] * (my_ulong) right -> body[j];
         }
     }
-    for (int i = 0; i < length; i++) {
-        temp -> body[i + 1] += temp -> body[i] / MOD;
-        temp -> body[i] %= MOD;
+    for (int i = 0; i < length - 1; i++) {
+        mult_res[i + 1] += mult_res[i] / MOD;
+        mult_res[i] %= MOD;
     }
-    resize_t_excluding_zeros(temp);
-    return temp;
+
+    bn *res = bn_new();
+    for (int i = 0; i < length; i++) {
+        res -> body[i] = mult_res[i];
+    }
+    free(mult_res);
+    recalculate_bn_size(res);
+    return res;
 }
 
-// operation x = l * r
+// operation x = left * right
 bn* bn_mul(bn const *left, bn const *right) {
     bn *temp = abs_bn_mul(left, right);
     if (left -> is_neg == right -> is_neg) {
@@ -370,104 +371,87 @@ bn* bn_mul(bn const *left, bn const *right) {
     return temp;
 }
 
-// operation x *= y
+// operation t *= right
 int bn_mul_to(bn *t, bn *right) {
     bn *temp = bn_mul(t, right);
-    t -> is_neg = temp -> is_neg;
-    t -> size = temp -> size;
-    for (int i = 0; i < MAX_SIZE; i++) {
-        t -> body[i] = temp -> body[i];
-    }
+    bn_copy(t, temp);
     bn_delete(temp);
     return 0;
 }
 
-// operation bn *t /= number
-void divide_bn_on_number (bn *t, int const num) {
+// operation bn *t /= 2
+void divide_by_2(bn *t) {
     for (int i = t -> size - 1; i >= 0; i--) {
         if (i) {
-            t -> body[i - 1] += (t -> body[i] % num) * MOD;
+            t -> body[i - 1] += (t -> body[i] % 2) * MOD;
         }
-        t -> body[i] /= num;
+        t -> body[i] /= 2;
     }
-    resize_t_excluding_zeros(t);
+    recalculate_bn_size(t);
 }
 
 // operation to find square root
-bn *square_root(bn *left, bn *right, bn const *t) {
-    bn *mid = bn_add(left, right);
-    divide_bn_on_number(mid, 2);
+// t has to be non negative
+bn *square_root(bn const *t) {
+    bn *lower = bn_new();
+    bn *upper = bn_init(t);
+
     bn *one = bn_new();
     bn_init_int(one, 1);
-    bn *mid_plus_one = bn_add(mid, one);
-    // make square mid_plus_one and mid
-    bn *square_mid = bn_mul(mid, mid);
-    bn *square_mid_plus_one = bn_mul(mid_plus_one, mid_plus_one);
-    if (abs_bn_cmp(square_mid_plus_one, t) < 0) {
-        bn_delete(mid_plus_one);
-        bn_delete(square_mid_plus_one);
-        bn_delete(square_mid);
-        bn_delete(one);
-        //bn_delete(left);
-        square_root(mid, right, t);
-    }
-    else if (abs_bn_cmp(square_mid, t) > 0) {
-        bn_delete(mid_plus_one);
-        bn_delete(square_mid_plus_one);
-        bn_delete(square_mid);
-        bn_delete(one);
-        //bn_delete(right);
-        square_root(left, mid, t);
-    }
-    else {
-        return mid;
-    }
-}
 
+    bn *ans = NULL;
+
+    while (ans == NULL) {
+        bn *mid = bn_add(lower, upper);
+        divide_by_2(mid);
+        bn *mid_plus_one = bn_add(mid, one);
+
+        bn* square_mid = bn_mul(mid, mid);
+        bn* square_mid_plus_one = bn_mul(mid_plus_one, mid_plus_one);
+
+        int comp_mid = abs_bn_cmp(square_mid, t);
+        int comp_mid_plus_one = abs_bn_cmp(square_mid_plus_one, t);
+
+        if (comp_mid_plus_one < 0) {
+            bn_delete(lower);
+            lower = bn_init(mid_plus_one);
+        }
+        else if (comp_mid > 0) {
+            bn_delete(upper);
+            upper = bn_init(mid);
+        }
+        else if (comp_mid_plus_one == 0) {
+            ans = bn_init(mid_plus_one);
+        }
+        else {
+            ans = bn_init(mid);
+        }
+
+        // common clean up
+        bn_delete(mid);
+        bn_delete(mid_plus_one);
+        bn_delete(square_mid);
+        bn_delete(square_mid_plus_one);
+    }
+
+    bn_delete(lower);
+    bn_delete(upper);
+    bn_delete(one);
+
+    return ans;
+}
 
 int main () {
-    char *a = malloc(sizeof(char) * 100000);
+    char *a = calloc(10000, sizeof(char));
     bn *first = bn_new();
-    bn *second = bn_new();
-    //int symbol;
     scanf("%s", a);
-    //scanf("%d", &symbol);
-    bn_init_string(second, a);
-    bn *third = bn_init(second);
-    bn *res = square_root(first, second, third);
+    bn_init_string(first, a);
+    bn *res = square_root(first);
     char *otv = my_bn_to_string(res);
     printf("%s\n", otv);
+    bn_delete(first);
+    bn_delete(res);
+    free(otv);
+    free(a);
     return 0;
 }
-
-/*int main()
-{
-    char *a = malloc(sizeof(char) * 100000);
-    char *b = malloc(sizeof(char) * 100000);
-    char symbol;
-    scanf("%s", a);
-    scanf("\n %c \n", &symbol);
-    scanf("%s", b);
-    bn *first = bn_new();
-    bn *second = bn_new();
-    bn *res = first;
-    bn_init_string(first, a);
-    bn_init_string(second, b);
-    if (symbol == '*') {
-        res = bn_mul(first, second);
-    }
-    char *otv = my_bn_to_string(res);
-    printf("%s\n", otv);
-    if (res -> size != 0) {
-        free(otv);
-    }
-    free(a);
-    free(b);
-    bn_delete(first);
-    bn_delete(second);
-    bn_delete(res);
-    return 0;
-}*/
-
-
-
