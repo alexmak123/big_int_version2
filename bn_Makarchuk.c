@@ -58,32 +58,34 @@ void set_zero(bn *t) {
     }
 }
 
+// NOT WORKING CORRECTLY!!!!
 // convert from base MOD to base 10
 // both representations are in reverse order
-int *convert_to_base_10(const bn *t) {
+int *convert_to_base_radix(const bn *t, int radix) {
     // allocate enough memory to fit digits in new base
-    int *base_10 = calloc((t -> size) * NUM_DIGITS, sizeof(int));
+    int *base_radix = calloc((t -> size) * NUM_DIGITS * 10, sizeof(int));
 
     int offset = 0;
     for (int i = 0; i < t -> size; i++) {
         int digit = t -> body[i];
-        for (int j = 0; j < NUM_DIGITS; j++) {
-            base_10[offset] = digit % 10;
-            digit /= 10;
+        for (int j = 0; j < radix; j++) {
+            base_radix[offset] = digit % radix;
+            digit /= radix;
             offset++;
         }
     }
-    return base_10;
+    return base_radix;
 }
-
-// returns a string representation of bn
-char *my_bn_to_string(const bn *t) {
+// NOT WORKING CORRECTLY!!!!
+// Return the representation of BN in the radix number system as a string
+// The line after use needs to be deleted.
+char *bn_to_string(bn const *t, int radix) {
     if (t -> size == 0) {
         return "0";
     }
 
     // allocate enough to fit number and maybe the minus sign
-    char *res = calloc(((t -> size) * NUM_DIGITS + 1), sizeof(char));
+    char *res = calloc(((t -> size) * NUM_DIGITS * 10 + 1), sizeof(char));
 
     int i = 0;
     if (t -> is_neg) {
@@ -91,23 +93,24 @@ char *my_bn_to_string(const bn *t) {
         i = 1;
     }
 
-    int *base_10 = convert_to_base_10(t);
+    int *base_radix = convert_to_base_radix(t, radix);
 
     // remove leading zeros
-    int j = (t -> size) * NUM_DIGITS - 1;
-    while (j >= 0 && base_10[j] == 0) {
+    int j = (t -> size) * NUM_DIGITS * 10 - 1;
+    while (j >= 0 && base_radix[j] == 0) {
         j--;
     }
 
     // reverse
     while (j >= 0) {
-        res[i] = base_10[j] + '0';
+        res[i] = base_radix[j] + '0';
         i++;
         j--;
     }
 
-    free(base_10);
+    free(base_radix);
     return res;
+
 }
 
 // create a new bn that equals zero
@@ -372,7 +375,7 @@ bn* bn_mul(bn const *left, bn const *right) {
 }
 
 // operation t *= right
-int bn_mul_to(bn *t, bn *right) {
+int bn_mul_to(bn *t, bn const *right) {
     bn *temp = bn_mul(t, right);
     bn_copy(t, temp);
     bn_delete(temp);
@@ -491,37 +494,118 @@ bn* abs_bn_div(bn const *left, bn const *right) {
     return ans;
 }
 
-/*// operation x = l / r
+// operation x = l / r
 bn* bn_div(bn const *left, bn const *right) {
-
-    return left;
-}*/
-
-int main()
-{
-    char *a = malloc(sizeof(char) * 100000);
-    char *b = malloc(sizeof(char) * 100000);
-    char symbol;
-    scanf("%s", a);
-    scanf("\n %c \n", &symbol);
-    scanf("%s", b);
-    bn *first = bn_new();
-    bn *second = bn_new();
-    bn *res = first;
-    bn_init_string(first, a);
-    bn_init_string(second, b);
-    if (symbol == '/') {
-        res = abs_bn_div(first, second);
+    bn *res = NULL;
+    if (left -> is_neg == 0 && right -> is_neg == 0) {
+        res = abs_bn_div(left, right);
     }
-    char *otv = my_bn_to_string(res);
-    printf("%s\n", otv);
-    if (res -> size != 0) {
-        free(otv);
+    else if (left -> is_neg == 1 && right -> is_neg == 1) {
+        bn *temp1 = bn_init(left);
+        bn *temp2 = bn_init(right);
+        temp1 -> is_neg = 0;
+        temp2 -> is_neg = 0;
+        res = abs_bn_div(temp1, temp2);
+        bn_delete(temp1);
+        bn_delete(temp2);
     }
-    free(a);
-    free(b);
-    bn_delete(first);
-    bn_delete(second);
-    bn_delete(res);
+    else if (left -> is_neg == 0 && right -> is_neg == 1){
+        res = abs_bn_div(left, right);
+        bn *one = bn_new();
+        bn_init_int(one, 1);
+        bn_add_to(res, one);
+        res -> is_neg = 1;
+    }
+    else {
+        bn *temp1 = bn_init(left);
+        bn *temp2 = bn_init(right);
+        temp1 -> is_neg = 0;
+        temp2 -> is_neg = 0;
+        res = abs_bn_div(temp1, temp2);
+        bn_delete(temp1);
+        bn_delete(temp2);
+        bn *one = bn_new();
+        bn_init_int(one, 1);
+        bn_add_to(res, one);
+        res -> is_neg = 1;
+        bn_delete(one);
+    }
+    return res;
+}
+
+
+//operation x = l%r
+bn* bn_mod(bn const *left, bn const *right) {
+    bn *div = bn_div(left, right);
+    bn_mul_to(div, right);
+    bn *res = bn_sub(left, div);
+    bn_delete(div);
+    return res;
+}
+
+// Change the sign to the opposite
+int bn_neg(bn *t) {
+    t -> is_neg = 1 - t -> is_neg;
     return 0;
 }
+
+// Take module
+int bn_abs(bn *t) {
+    t -> is_neg = 0;
+    return 0;
+}
+
+//-1 if t <0; 0 if t = 0, 1 if t> 0
+int bn_sign(bn const *t) {
+    if (t -> size == 0) {
+        return 0;
+    }
+    if (t -> is_neg == 0) {
+        return 1;
+    }
+    if (t -> is_neg == 1) {
+        return -1;
+    }
+    return 0;
+}
+
+// t /= right
+int bn_div_to(bn *t, bn const *right) {
+    bn *temp = bn_div(t, right);
+    bn_copy(t, temp);
+    bn_delete(temp);
+    return 0;
+}
+
+// t %= right
+int bn_mod_to(bn *t, bn const *right) {
+    bn *temp = bn_mod(t, right);
+    bn_copy(t, temp);
+    bn_delete(temp);
+    return 0;
+}
+
+// Raise the number to the degree degree
+int bn_pow_to(bn *t, int degree) {
+    if (degree == 0) {
+        bn *one = bn_new();
+        bn_init_int(one, 1);
+        bn_copy(t, one);
+        bn_delete(one);
+        return 0;
+    }
+    bn *temp = bn_init(t);
+    for (int i = 0; i < degree; i++) {
+        bn_mul_to(t, temp);
+    }
+    bn_delete(temp);
+    return 0;
+}
+
+/*// Initialize the value of BN by representing the string in radix
+int bn_init_string_radix(bn *t, const char *init_string, int radix)*/
+
+
+/*// functions which are left
+// Extract the root of the reciprocal degree from BN (bonus function)
+int bn_root_to(bn *t, int reciprocal);*/
