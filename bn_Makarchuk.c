@@ -441,17 +441,87 @@ bn *square_root(bn const *t) {
     return ans;
 }
 
-int main () {
-    char *a = calloc(10000, sizeof(char));
-    bn *first = bn_new();
+// operation x = l / r by modulo
+bn* abs_bn_div(bn const *left, bn const *right) {
+    bn *lower = bn_new();
+    bn *upper = bn_init(left);
+
+    bn *one = bn_new();
+    bn_init_int(one, 1);
+
+    bn *ans = NULL;
+
+    while (ans == NULL) {
+        bn *mid = bn_add(lower, upper);
+        divide_by_2(mid);
+        bn *mid_plus_one = bn_add(mid, one);
+
+        bn* mult_mid_right = bn_mul(mid, right);
+        bn* mult_mid_plus_one_right = bn_mul(mid_plus_one, right);
+
+        int comp_mid = abs_bn_cmp(mult_mid_right, left);
+        int comp_mid_plus_one = abs_bn_cmp(mult_mid_plus_one_right , left);
+
+        if (comp_mid_plus_one < 0) {
+            bn_delete(lower);
+            lower = bn_init(mid_plus_one);
+        }
+        else if (comp_mid > 0) {
+            bn_delete(upper);
+            upper = bn_init(mid);
+        }
+        else if (comp_mid_plus_one == 0) {
+            ans = bn_init(mid_plus_one);
+        }
+        else {
+            ans = bn_init(mid);
+        }
+
+        // common clean up
+        bn_delete(mid);
+        bn_delete(mid_plus_one);
+        bn_delete(mult_mid_right );
+        bn_delete(mult_mid_plus_one_right);
+    }
+
+    bn_delete(lower);
+    bn_delete(upper);
+    bn_delete(one);
+
+    return ans;
+}
+
+/*// operation x = l / r
+bn* bn_div(bn const *left, bn const *right) {
+
+    return left;
+}*/
+
+int main()
+{
+    char *a = malloc(sizeof(char) * 100000);
+    char *b = malloc(sizeof(char) * 100000);
+    char symbol;
     scanf("%s", a);
+    scanf("\n %c \n", &symbol);
+    scanf("%s", b);
+    bn *first = bn_new();
+    bn *second = bn_new();
+    bn *res = first;
     bn_init_string(first, a);
-    bn *res = square_root(first);
+    bn_init_string(second, b);
+    if (symbol == '/') {
+        res = abs_bn_div(first, second);
+    }
     char *otv = my_bn_to_string(res);
     printf("%s\n", otv);
-    bn_delete(first);
-    bn_delete(res);
-    free(otv);
+    if (res -> size != 0) {
+        free(otv);
+    }
     free(a);
+    free(b);
+    bn_delete(first);
+    bn_delete(second);
+    bn_delete(res);
     return 0;
 }
