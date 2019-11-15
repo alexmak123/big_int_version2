@@ -16,6 +16,7 @@ struct bn_s {
 
 typedef struct bn_s bn;
 typedef unsigned long long int my_ulong;
+const int RADIX_2_MOD = 30;
 
 // enough to fit in 100000 symbols
 const int MAX_SIZE = 12000;
@@ -77,9 +78,11 @@ int *convert_to_base_10(const bn *t) {
 }
 
 // returns a string representation of bn
-char *my_bn_to_string(const bn *t) {
+const char *bn_to_string(const bn *t, int radix) {
     if (t -> size == 0) {
-        return "0";
+        char *res = calloc(1, sizeof(char));
+        res[0] = '0';
+        return res;
     }
 
     // allocate enough to fit number and maybe the minus sign
@@ -109,7 +112,6 @@ char *my_bn_to_string(const bn *t) {
     free(base_10);
     return res;
 }
-
 // create a new bn that equals zero
 bn *bn_new() {
     bn *t = malloc(sizeof(bn));
@@ -390,57 +392,6 @@ void divide_by_2(bn *t) {
     recalculate_bn_size(t);
 }
 
-// operation to find square root
-// t has to be non negative
-bn *square_root(bn const *t) {
-    bn *lower = bn_new();
-    bn *upper = bn_init(t);
-
-    bn *one = bn_new();
-    bn_init_int(one, 1);
-
-    bn *ans = NULL;
-
-    while (ans == NULL) {
-        bn *mid = bn_add(lower, upper);
-        divide_by_2(mid);
-        bn *mid_plus_one = bn_add(mid, one);
-
-        bn* square_mid = bn_mul(mid, mid);
-        bn* square_mid_plus_one = bn_mul(mid_plus_one, mid_plus_one);
-
-        int comp_mid = abs_bn_cmp(square_mid, t);
-        int comp_mid_plus_one = abs_bn_cmp(square_mid_plus_one, t);
-
-        if (comp_mid_plus_one < 0) {
-            bn_delete(lower);
-            lower = bn_init(mid_plus_one);
-        }
-        else if (comp_mid > 0) {
-            bn_delete(upper);
-            upper = bn_init(mid);
-        }
-        else if (comp_mid_plus_one == 0) {
-            ans = bn_init(mid_plus_one);
-        }
-        else {
-            ans = bn_init(mid);
-        }
-
-        // common clean up
-        bn_delete(mid);
-        bn_delete(mid_plus_one);
-        bn_delete(square_mid);
-        bn_delete(square_mid_plus_one);
-    }
-
-    bn_delete(lower);
-    bn_delete(upper);
-    bn_delete(one);
-
-    return ans;
-}
-
 // operation x = l / r by modulo
 bn* abs_bn_div(bn const *left, bn const *right) {
     bn *lower = bn_new();
@@ -576,34 +527,75 @@ int bn_mod_to(bn *t, bn const *right) {
 
 // Raise the number to the degree degree
 int bn_pow_to(bn *t, int degree) {
-    if (degree == 0) {
-        bn *one = bn_new();
-        bn_init_int(one, 1);
-        bn_copy(t, one);
-        bn_delete(one);
-        return 0;
+    bn *one = bn_new();
+    bn_init_int(one, 1);
+    while (degree) {
+        if (degree % 2 != 0) {
+            bn_mul_to(one, t);
+            degree -= 1;
+        }
+        else {
+            bn_mul_to(t, t);
+            degree /= 2;
+        }
     }
-    bn *temp = bn_init(t);
-    for (int i = 0; i < degree; i++) {
-        bn_mul_to(t, temp);
-    }
-    bn_delete(temp);
+    bn_copy(t, one);
+    bn_delete(one);
     return 0;
 }
 
+int bn_root_to(bn *t, int reciprocal) {
+    bn *lower = bn_new();
+    bn *upper = bn_init(t);
 
-int main () {
-    char *a = calloc(10000, sizeof(char));
-    bn *first = bn_new();
-    scanf("%s", a);
-    bn_init_string(first, a);
-    bn *res = square_root(first);
-    char *otv = my_bn_to_string(res);
-    printf("%s\n", otv);
-    bn_delete(first);
-    bn_delete(res);
-    free(otv);
-    free(a);
+    bn *one = bn_new();
+    bn_init_int(one, 1);
+
+    bn *ans = NULL;
+
+    while (ans == NULL) {
+        bn *mid = bn_add(lower, upper);
+        divide_by_2(mid);
+        bn *mid_plus_one = bn_add(mid, one);
+
+        bn* pow_mid = bn_init(mid);
+        bn_pow_to(pow_mid, reciprocal);
+        bn* pow_mid_plus_one = bn_init(mid_plus_one);
+        bn_pow_to(pow_mid_plus_one, reciprocal);
+
+        int comp_mid = abs_bn_cmp(pow_mid, t);
+        int comp_mid_plus_one = abs_bn_cmp(pow_mid_plus_one, t);
+
+        if (comp_mid_plus_one < 0) {
+            bn_delete(lower);
+            lower = bn_init(mid_plus_one);
+        }
+        else if (comp_mid > 0) {
+            bn_delete(upper);
+            upper = bn_init(mid);
+        }
+        else if (comp_mid_plus_one == 0) {
+            ans = bn_init(mid_plus_one);
+        }
+        else {
+            ans = bn_init(mid);
+        }
+
+        // common clean up
+        bn_delete(mid);
+        bn_delete(mid_plus_one);
+        bn_delete(pow_mid);
+        bn_delete(pow_mid_plus_one);
+    }
+
+    bn_copy(t, ans);
+    bn_delete(lower);
+    bn_delete(upper);
+    bn_delete(one);
+    bn_delete(ans);
     return 0;
 }
 
+// TO DO
+/*// Initialize the value of BN by representing the string in radix
+int bn_init_string_radix(bn *t, const char *init_string, int radix);*/
