@@ -78,7 +78,7 @@ int *convert_to_base_10(const bn *t) {
 }
 
 // returns a string representation of bn
-const char *bn_to_string(const bn *t, int radix) {
+char *bn_to_string(const bn *t, int radix) {
     if (t -> size == 0) {
         char *res = calloc(1, sizeof(char));
         res[0] = '0';
@@ -392,7 +392,7 @@ void divide_by_2(bn *t) {
     recalculate_bn_size(t);
 }
 
-// operation x = l / r by modulo
+/*// operation x = l / r by modulo
 bn* abs_bn_div(bn const *left, bn const *right) {
     bn *lower = bn_new();
     bn *upper = bn_init(left);
@@ -442,6 +442,64 @@ bn* abs_bn_div(bn const *left, bn const *right) {
     return ans;
 }
 
+// operation x = l / r
+bn* bn_div(bn const *left, bn const *right) {
+    bn *res = NULL;
+    if (left -> is_neg == 0 && right -> is_neg == 0) {
+        res = abs_bn_div(left, right);
+    }
+    else if (left -> is_neg == 1 && right -> is_neg == 1) {
+        bn *temp1 = bn_init(left);
+        bn *temp2 = bn_init(right);
+        temp1 -> is_neg = 0;
+        temp2 -> is_neg = 0;
+        res = abs_bn_div(temp1, temp2);
+        bn_delete(temp1);
+        bn_delete(temp2);
+    }
+    else if (left -> is_neg == 0 && right -> is_neg == 1){
+        res = abs_bn_div(left, right);
+        res -> is_neg = 1;
+    }
+    else {
+        res = abs_bn_div(left, right);
+        bn *one = bn_new();
+        bn_init_int(one, 1);
+        bn_add_to(res, one);
+        res -> is_neg = 1;
+        bn_delete(one);
+    }
+    return res;
+}*/
+
+// operation x = l / r by modulo
+bn* abs_bn_div(bn const *left, bn const *right) {
+    //check for zeros
+    bn *zero = bn_new();
+    if (abs_bn_cmp(right, zero) == 0) {
+        return NULL;
+    }
+    if (abs_bn_cmp(left, zero) == 0) {
+        return zero;
+    }
+    bn_delete(zero);
+
+    bn *ans = bn_new();
+    bn *curr = bn_new();
+    int j = 0;
+    for (int i = left -> size - 1; i >= 0; i--) {
+        curr -> body[j] = left -> body[i];
+        j++;
+        int x = 0, l = 0, r = MOD;
+        while (l <= r) {
+            int mid = (l + r) / 2;
+
+        }
+    }
+
+    bn_delete(curr);
+    return ans;
+}
 
 // operation x = l / r
 bn* bn_div(bn const *left, bn const *right) {
@@ -472,7 +530,6 @@ bn* bn_div(bn const *left, bn const *right) {
     }
     return res;
 }
-
 
 //operation x = l%r
 bn* bn_mod(bn const *left, bn const *right) {
@@ -599,3 +656,30 @@ int bn_root_to(bn *t, int reciprocal) {
 // TO DO
 /*// Initialize the value of BN by representing the string in radix
 int bn_init_string_radix(bn *t, const char *init_string, int radix);*/
+
+int main()
+{
+    char *a = malloc(sizeof(char) * 100000);
+    char *b = malloc(sizeof(char) * 100000);
+    char symbol;
+    scanf("%s", a);
+    scanf("\n %c \n", &symbol);
+    scanf("%s", b);
+    bn *first = bn_new();
+    bn *second = bn_new();
+    bn *res = NULL;
+    bn_init_string(first, a);
+    bn_init_string(second, b);
+    if (symbol == '/') {
+        res = bn_div(first, second);
+    }
+    char *otv = bn_to_string(res, 10);
+    printf("%s\n", otv);
+    free(otv);
+    free(a);
+    free(b);
+    bn_delete(first);
+    bn_delete(second);
+    bn_delete(res);
+    return 0;
+}
