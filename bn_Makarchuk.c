@@ -63,9 +63,9 @@ void set_zero(bn *t) {
 }
 
 // operation |t| /= num, ignores the sign of t
-// 1 <= num < 36 should hold
+// 1 <= num <= 36 should hold
 void abs_divide_by_int(bn *t, int num) {
-    assert(1 <= num && num < 36);
+    assert(1 <= num && num <= 36);
     for (int i = t -> size - 1; i >= 0; i--) {
         if (i) {
             // because MOD = 10^8 and MOD * () % radix <= 36 * 10^8
@@ -176,21 +176,19 @@ int abs_bn_add_to(bn *t, bn const *right) {
 // assumes that pointers are valid
 int abs_bn_sub_to(bn *t, bn const *right) {
     int minus_one = 0;
-
     for (int i = 0; i < t -> size; i++) {
-        u_int digit = t -> body[i] - right -> body[i];
+        int digit = t -> body[i] - right -> body[i];
         if (minus_one) {
             digit--;
         }
         if (digit < 0) {
             minus_one = 1;
             digit += MOD;
-
         }
         else {
             minus_one = 0;
         }
-        t -> body[i] = digit;
+        t -> body[i] = (u_int)digit;
     }
     //resize excluding zeros
     recalculate_bn_size(t);
@@ -272,54 +270,11 @@ bn* bn_sub(bn const *left, bn const *right) {
     return temp;
 }
 
-/*// initialize the value of BN with the decimal representation of the string
-int bn_init_string(bn *t, const char *init_string) {
-    set_zero(t);
-    int p = strlen(init_string);
-    int string_start = 0;
-    if (init_string[0] == '-') {
-        t -> is_neg = 1;
-        p -= 1;
-        // actual number starts from 1
-        string_start = 1;
-    }
-    else {
-        t -> is_neg = 0;
-    }
-
-    t -> size = p / NUM_DIGITS;
-    if (p % NUM_DIGITS != 0) {
-        t -> size += 1;
-    }
-
-    // string index - up to NUM_DIGITS before it belong to cell
-    // can be less then NUM_DIGITS if it is last cell
-    int string_i = strlen(init_string);
-    int cell_i = 0;
-    while (string_i >= string_start) {
-        int cell = 0;
-        for (int i = string_i - NUM_DIGITS; i < string_i; i++) {
-            if (i < string_start) {
-                // last cell that has less then NUM_DIGITS, skip some of them
-                continue;
-            }
-            cell *= 10;
-            cell += init_string[i] - '0';
-        }
-        string_i -= NUM_DIGITS;
-
-        t -> body[cell_i] = cell;
-        cell_i++;
-    }
-
-    return 0;
-}*/
-
 // operation x = |left| * |right|
 bn *abs_bn_mul(bn const *left, bn const *right) {
     int length = left -> size + right -> size + 1;
 
-    my_u_long *mult_res = calloc(length, sizeof(u_long));
+    my_u_long *mult_res = calloc(length, sizeof(my_u_long));
 
     for (int i = 0; i < left -> size; i++) {
         for (int j = 0; j < right -> size; j++) {
@@ -466,7 +421,7 @@ void reverse_string(char *s, int size) {
 }
 
 // returns a string representation of bn
-char *bn_to_string(const bn *const_t, int radix) {
+const char *bn_to_string(const bn *const_t, int radix) {
     assert(2 <= radix && radix <= 36);
 
     if (const_t -> size == 0) {
@@ -479,7 +434,7 @@ char *bn_to_string(const bn *const_t, int radix) {
     bn *t = bn_init(const_t);
 
     // creates constant bn that equals to zero
-    bn const *bn_zero = bn_new();
+    bn *bn_zero = bn_new();
     // creates constant bn that equals to radix
     bn *bn_radix = bn_new();
     bn_init_int(bn_radix, radix);
@@ -519,12 +474,17 @@ char *bn_to_string(const bn *const_t, int radix) {
     reverse_string(res, i);
 
     bn_delete(t);
+    bn_delete(bn_zero);
+    bn_delete(bn_radix);
     return res;
 }
 
 // initialize the value of BN with the decimal representation of the string
 int bn_init_string(bn *t, const char *init_string) {
     set_zero(t);
+    if (strlen(init_string) == 1 && init_string[0] == '0') {
+        return 0;
+    }
     int p = strlen(init_string);
     int string_start = 0;
     if (init_string[0] == '-') {
@@ -586,16 +546,148 @@ int bn_init_string_radix(bn *t, const char *init_string, int radix) {
     return 0;
 }
 
-int main () {
-    char *a = calloc(10000, sizeof(char));
-    bn *first = bn_new();
+// operation bn *t /= 2
+void divide_by_2(bn *t) {
+    for (int i = t -> size - 1; i >= 0; i--) {
+        if (i) {
+            t -> body[i - 1] += (t -> body[i] % 2) * MOD;
+        }
+        t -> body[i] /= 2;
+    }
+    recalculate_bn_size(t);
+}
+
+// operation x = l / r by modulo
+bn* abs_bn_div(bn const *left, bn const *right) {
+    bn *lower = bn_new();
+    bn *upper = bn_init(left);
+
+    bn *one = bn_new();
+    bn_init_int(one, 1);
+
+    bn *ans = NULL;
+
+    while (ans == NULL) {
+        bn *mid = bn_add(lower, upper);
+        divide_by_2(mid);
+        bn *mid_plus_one = bn_add(mid, one);
+
+        bn* mult_mid_right = bn_mul(mid, right);
+        bn* mult_mid_plus_one_right = bn_mul(mid_plus_one, right);
+
+        int comp_mid = abs_bn_cmp(mult_mid_right, left);
+        int comp_mid_plus_one = abs_bn_cmp(mult_mid_plus_one_right , left);
+
+        if (comp_mid_plus_one < 0) {
+            bn_delete(lower);
+            lower = bn_init(mid_plus_one);
+        }
+        else if (comp_mid > 0) {
+            bn_delete(upper);
+            upper = bn_init(mid);
+        }
+        else if (comp_mid_plus_one == 0) {
+            ans = bn_init(mid_plus_one);
+        }
+        else {
+            ans = bn_init(mid);
+        }
+
+        // common clean up
+        bn_delete(mid);
+        bn_delete(mid_plus_one);
+        bn_delete(mult_mid_right );
+        bn_delete(mult_mid_plus_one_right);
+    }
+
+    bn_delete(lower);
+    bn_delete(upper);
+    bn_delete(one);
+
+    return ans;
+}
+
+
+// operation x = l / r
+bn* bn_div(bn const *left, bn const *right) {
+    bn *res = NULL;
+    if (left -> is_neg == 0 && right -> is_neg == 0) {
+        res = abs_bn_div(left, right);
+    }
+    else if (left -> is_neg == 1 && right -> is_neg == 1) {
+        bn *temp1 = bn_init(left);
+        bn *temp2 = bn_init(right);
+        temp1 -> is_neg = 0;
+        temp2 -> is_neg = 0;
+        res = abs_bn_div(temp1, temp2);
+        bn_delete(temp1);
+        bn_delete(temp2);
+    }
+    else if (left -> is_neg == 0 && right -> is_neg == 1){
+        res = abs_bn_div(left, right);
+        res -> is_neg = 1;
+    }
+    else {
+        res = abs_bn_div(left, right);
+        bn *one = bn_new();
+        bn_init_int(one, 1);
+        bn_add_to(res, one);
+        res -> is_neg = 1;
+        bn_delete(one);
+    }
+    return res;
+}
+
+
+//operation x = l%r
+bn* bn_mod(bn const *left, bn const *right) {
+    bn *div = bn_div(left, right);
+    bn_mul_to(div, right);
+    bn *res = bn_sub(left, div);
+    bn_delete(div);
+    return res;
+}
+
+// t /= right
+int bn_div_to(bn *t, bn const *right) {
+    bn *temp = bn_div(t, right);
+    bn_copy(t, temp);
+    bn_delete(temp);
+    return 0;
+}
+
+// t %= right
+int bn_mod_to(bn *t, bn const *right) {
+    bn *temp = bn_mod(t, right);
+    bn_copy(t, temp);
+    bn_delete(temp);
+    return 0;
+}
+
+int main()
+{
+    char *a = malloc(sizeof(char) * 100000);
+    char *b = malloc(sizeof(char) * 100000);
+    char symbol;
     scanf("%s", a);
+    scanf("\n %c \n", &symbol);
+    scanf("%s", b);
+    bn *first = bn_new();
+    bn *second = bn_new();
+    bn *res = NULL;
     bn_init_string(first, a);
-    bn_root_to(first, 2);
-    char *otv = bn_to_string(first, 10);
+    bn_init_string(second, b);
+    if (symbol == '/') {
+        res = bn_div(first, second);
+    }
+    char *otv = bn_to_string(res, 10);
     printf("%s\n", otv);
-    bn_delete(first);
+
     free(otv);
     free(a);
+    free(b);
+    bn_delete(first);
+    bn_delete(second);
+    bn_delete(res);
     return 0;
 }
