@@ -421,7 +421,7 @@ void reverse_string(char *s, int size) {
 }
 
 // returns a string representation of bn
-const char *bn_to_string(const bn *const_t, int radix) {
+char *bn_to_string(const bn *const_t, int radix) {
     assert(2 <= radix && radix <= 36);
 
     if (const_t -> size == 0) {
@@ -557,71 +557,90 @@ void divide_by_2(bn *t) {
     recalculate_bn_size(t);
 }
 
-// operation x = l / r by modulo
-bn* abs_bn_div(bn const *left, bn const *right) {
-    bn *lower = bn_new();
-    bn *upper = bn_init(left);
-
-    bn *one = bn_new();
-    bn_init_int(one, 1);
-
-    bn *ans = NULL;
-
-    while (ans == NULL) {
-        bn *mid = bn_add(lower, upper);
-        divide_by_2(mid);
-        bn *mid_plus_one = bn_add(mid, one);
-
-        bn* mult_mid_right = bn_mul(mid, right);
-        bn* mult_mid_plus_one_right = bn_mul(mid_plus_one, right);
-
-        int comp_mid = abs_bn_cmp(mult_mid_right, left);
-        int comp_mid_plus_one = abs_bn_cmp(mult_mid_plus_one_right , left);
-
-        if (comp_mid_plus_one < 0) {
-            bn_delete(lower);
-            lower = bn_init(mid_plus_one);
-        }
-        else if (comp_mid > 0) {
-            bn_delete(upper);
-            upper = bn_init(mid);
-        }
-        else if (comp_mid_plus_one == 0) {
-            ans = bn_init(mid_plus_one);
-        }
-        else {
-            ans = bn_init(mid);
-        }
-
-        // common clean up
-        bn_delete(mid);
-        bn_delete(mid_plus_one);
-        bn_delete(mult_mid_right );
-        bn_delete(mult_mid_plus_one_right);
+void reverse_bn (bn *t) {
+    for (int i = 0; 2 * i < t -> size; i++) {
+        u_int temp = t -> body[i];
+        t -> body[i] = t -> body[t -> size - i - 1];
+        t -> body[t -> size - i - 1] = temp;
     }
-
-    bn_delete(lower);
-    bn_delete(upper);
-    bn_delete(one);
-
-    return ans;
 }
 
+// operation x = l / r by modulo
+// DOESNT WORK!!!
+bn* abs_bn_div(bn const *left, bn const *right) {
+    //check for zeros
+    bn *zero = bn_new();
+    if (abs_bn_cmp(right, zero) == 0) {
+        return NULL;
+    }
+    if (abs_bn_cmp(left, zero) == 0) {
+        return zero;
+    }
+    bn_delete(zero);
+
+    bn *ans = bn_new();
+    bn *curr = bn_new();
+    bn *bn_mid = bn_new();
+    bn *bn_mid_plus_one = bn_new();
+    int iter_for_ans = 0;
+    int j = 0;
+    for (int i = left -> size - 1; i >= 0; i--) {
+        // we take j digit in mod system (for example 122141235214 -> 41235214(first digit) and 00001221(second digit))
+        curr -> body[j] = left -> body[i];
+        j += 1;
+        //we find x in range (0, MOD) that if we multiply it on b will give us result most closest to curr
+        //and less then curr and do it with bin_search
+        int x = -1, l = 0, r = MOD;
+        while (x == -1) {
+            int mid = (l + r) / 2;
+            int mid_plus_one = mid + 1;
+            bn_init_int(bn_mid, mid);
+            bn_init_int(bn_mid_plus_one, mid_plus_one);
+            bn_mul_to(bn_mid, right);
+            bn_mul_to(bn_mid_plus_one, right);
+            bn *reverse_curr = bn_init(curr);
+            reverse_bn(reverse_curr);
+
+            if (abs_bn_cmp(bn_mid_plus_one, reverse_curr) < 0) {
+                l = mid_plus_one;
+            }
+            else if (abs_bn_cmp(bn_mid, reverse_curr) > 0) {
+                r = mid;
+            }
+            else if (abs_bn_cmp(bn_mid_plus_one, reverse_curr) == 0) {
+                x = mid_plus_one;
+            }
+            else {
+                x = mid;
+            }
+            bn_delete(reverse_curr);
+        }
+        ans -> body[iter_for_ans] = (u_int)x;
+        iter_for_ans += 1;
+        reverse_bn(curr);
+        bn *bn_x = bn_new();
+        bn_init_int(bn_x, x);
+        bn *mul_x_and_right = bn_mul(bn_x, right);
+
+        bn_sub_to(curr, mul_x_and_right);
+
+        recalculate_bn_size(curr);
+        reverse_bn(curr);
+        bn_delete(mul_x_and_right);
+        bn_delete(bn_x);
+    }
+    recalculate_bn_size(ans);
+    bn_delete(curr);
+    bn_delete(bn_mid);
+    bn_delete(bn_mid_plus_one);
+    return ans;
+}
 
 // operation x = l / r
 bn* bn_div(bn const *left, bn const *right) {
     bn *res = NULL;
-    if (left -> is_neg == 0 && right -> is_neg == 0) {
+    if (left -> is_neg == right -> is_neg) {
         res = abs_bn_div(left, right);
-    }
-    else if (left -> is_neg == 1 && right -> is_neg == 1) {
-        bn *temp1 = bn_init(left);
-        bn *temp2 = bn_init(right);
-        temp1 -> is_neg = 0;
-        temp2 -> is_neg = 0;
-        res = abs_bn_div(temp1, temp2);
-        bn_delete(temp1);
-        bn_delete(temp2);
     }
     else if (left -> is_neg == 0 && right -> is_neg == 1){
         res = abs_bn_div(left, right);
@@ -678,7 +697,7 @@ int main()
     bn_init_string(first, a);
     bn_init_string(second, b);
     if (symbol == '/') {
-        res = bn_div(first, second);
+        res = abs_bn_div(first, second);
     }
     char *otv = bn_to_string(res, 10);
     printf("%s\n", otv);
