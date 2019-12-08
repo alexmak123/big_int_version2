@@ -51,6 +51,9 @@ void recalculate_bn_size(bn *t) {
         i--;
     }
     t -> size = i + 1;
+    /*if (t -> size == 0) {
+        t -> is_neg = 0;
+    }*/
 }
 
 // sets bigint value to zero
@@ -210,17 +213,21 @@ int abs_bn_cmp(bn const *left, bn const *right) {
 
 // if the left is less, return < 0; if equal, return 0; otherwise > 0
 int bn_cmp(bn const *left, bn const *right) {
-    if (left -> is_neg == 0 && right -> is_neg == 1) {
-        return -1;
+    int comp = abs_bn_cmp(left, right);
+    if (comp == 0) {
+        return 0;
     }
-    else if (left -> is_neg == 1 && right -> is_neg == 0) {
+    if (left -> is_neg == 0 && right -> is_neg == 1) {
         return 1;
     }
-    else if (left -> is_neg == 0 && right -> is_neg == 0) {
-        return abs_bn_cmp(right, left);
+    else if (left -> is_neg == 1 && right -> is_neg == 0) {
+        return -1;
+    }
+    else if (left -> is_neg == 1 && right -> is_neg == 1) {
+        return -comp;
     }
     else {
-        return abs_bn_cmp(left, right);
+        return comp;
     }
 }
 
@@ -557,106 +564,124 @@ void divide_by_2(bn *t) {
     recalculate_bn_size(t);
 }
 
-void reverse_bn (bn *t) {
-    for (int i = 0; 2 * i < t -> size; i++) {
-        u_int temp = t -> body[i];
-        t -> body[i] = t -> body[t -> size - i - 1];
-        t -> body[t -> size - i - 1] = temp;
+// operation x = x * MOD + cell
+void shift_and_append_cell(bn *x, u_int cell) {
+    assert(x -> size < MAX_SIZE);
+    if (x -> size == 0) {
+        x -> is_neg = 0;
     }
+
+    for (int i = x -> size; i >= 1; i--) {
+        x -> body[i] = x -> body[i - 1];
+    }
+    x -> body[0] = cell;
+    x -> size++;
+}
+
+// binary search maximum multiplier such that
+// ans * coef < upper_bound
+int binary_search_multiplier(bn const *coef, bn const *upper_bound) {
+    bn *bn_mid = bn_new();
+
+    int l = 0, r = MOD - 1;
+
+    while (r - l > 1) {
+        int mid = (l + r) / 2;
+
+        bn_init_int(bn_mid, mid);
+        bn_mul_to(bn_mid, coef);
+
+        if (abs_bn_cmp(bn_mid, upper_bound) > 0) {
+            r = mid;
+        } else {
+            l = mid;
+        }
+    }
+
+    int ans = l;
+    bn_init_int(bn_mid, r);
+    bn_mul_to(bn_mid, coef);
+    if (abs_bn_cmp(bn_mid, upper_bound) <= 0) {
+        ans = r;
+    }
+    bn_delete(bn_mid);
+    return ans;
 }
 
 // operation x = l / r by modulo
-// DOESNT WORK!!!
+// left should be >= 0
+// right should be > 0
 bn* abs_bn_div(bn const *left, bn const *right) {
     //check for zeros
     bn *zero = bn_new();
-    if (abs_bn_cmp(right, zero) == 0) {
-        return NULL;
-    }
-    if (abs_bn_cmp(left, zero) == 0) {
-        return zero;
-    }
-    bn_delete(zero);
+
+    // checking input
+    assert(bn_cmp(left, zero) >= 0);
+    assert(bn_cmp(right, zero) > 0);
 
     bn *ans = bn_new();
     bn *curr = bn_new();
-    bn *bn_mid = bn_new();
-    bn *bn_mid_plus_one = bn_new();
-    int iter_for_ans = 0;
-    int j = 0;
+    bn *to_sub = bn_new();
+
     for (int i = left -> size - 1; i >= 0; i--) {
-        // we take j digit in mod system (for example 122141235214 -> 41235214(first digit) and 00001221(second digit))
-        curr -> body[j] = left -> body[i];
-        j += 1;
-        //we find x in range (0, MOD) that if we multiply it on b will give us result most closest to curr
-        //and less then curr and do it with bin_search
-        int x = -1, l = 0, r = MOD;
-        while (x == -1) {
-            int mid = (l + r) / 2;
-            int mid_plus_one = mid + 1;
-            bn_init_int(bn_mid, mid);
-            bn_init_int(bn_mid_plus_one, mid_plus_one);
-            bn_mul_to(bn_mid, right);
-            bn_mul_to(bn_mid_plus_one, right);
-            bn *reverse_curr = bn_init(curr);
-            reverse_bn(reverse_curr);
+        shift_and_append_cell(curr, left->body[i]);
 
-            if (abs_bn_cmp(bn_mid_plus_one, reverse_curr) < 0) {
-                l = mid_plus_one;
-            }
-            else if (abs_bn_cmp(bn_mid, reverse_curr) > 0) {
-                r = mid;
-            }
-            else if (abs_bn_cmp(bn_mid_plus_one, reverse_curr) == 0) {
-                x = mid_plus_one;
-            }
-            else {
-                x = mid;
-            }
-            bn_delete(reverse_curr);
-        }
-        ans -> body[iter_for_ans] = (u_int)x;
-        iter_for_ans += 1;
-        reverse_bn(curr);
-        bn *bn_x = bn_new();
-        bn_init_int(bn_x, x);
-        bn *mul_x_and_right = bn_mul(bn_x, right);
+        int ans_cell = binary_search_multiplier(right, curr);
+        shift_and_append_cell(ans, ans_cell);
 
-        bn_sub_to(curr, mul_x_and_right);
+        bn_init_int(to_sub, ans_cell);
+        bn_mul_to(to_sub, right);
 
-        recalculate_bn_size(curr);
-        reverse_bn(curr);
-        bn_delete(mul_x_and_right);
-        bn_delete(bn_x);
+        assert(bn_cmp(to_sub, curr) <= 0);
+
+        bn_sub_to(curr, to_sub);
+        assert(bn_cmp(curr, zero) >= 0);
     }
     recalculate_bn_size(ans);
+    bn_delete(zero);
+
     bn_delete(curr);
-    bn_delete(bn_mid);
-    bn_delete(bn_mid_plus_one);
+    bn_delete(to_sub);
     return ans;
+}
+
+//operation x = l%r abs
+bn* abs_bn_mod(bn const *left, bn const *right) {
+    bn *div = abs_bn_div(left, right);
+    bn_mul_to(div, right);
+    bn *res = bn_sub(left, div);
+    bn_delete(div);
+    return res;
 }
 
 // operation x = l / r
 bn* bn_div(bn const *left, bn const *right) {
     bn *res = NULL;
-    if (left -> is_neg == right -> is_neg) {
-        res = abs_bn_div(left, right);
-    }
-    else if (left -> is_neg == 0 && right -> is_neg == 1){
-        res = abs_bn_div(left, right);
+    bn  *temp1 = bn_init(left);
+    temp1 -> is_neg = 0;
+    bn  *temp2 = bn_init(right);
+    temp2 -> is_neg = 0;
+
+    res = abs_bn_div(temp1, temp2);
+    if (left -> is_neg != right -> is_neg ) {
+        //if temp1 % temp2 != 0 we add 1 to res
+        bn *mod = abs_bn_mod(temp1, temp2);
+        bn *zero = bn_new();
+        if (abs_bn_cmp(mod, zero) != 0) {
+            bn *one = bn_new();
+            bn_init_int(one, 1);
+            bn_add_to(res, one);
+            bn_delete(one);
+        }
         res -> is_neg = 1;
+        bn_delete(mod);
+        bn_delete(zero);
     }
-    else {
-        res = abs_bn_div(left, right);
-        bn *one = bn_new();
-        bn_init_int(one, 1);
-        bn_add_to(res, one);
-        res -> is_neg = 1;
-        bn_delete(one);
-    }
+
+    bn_delete(temp1);
+    bn_delete(temp2);
     return res;
 }
-
 
 //operation x = l%r
 bn* bn_mod(bn const *left, bn const *right) {
@@ -685,28 +710,21 @@ int bn_mod_to(bn *t, bn const *right) {
 
 int main()
 {
-    char *a = malloc(sizeof(char) * 100000);
-    char *b = malloc(sizeof(char) * 100000);
-    char symbol;
-    scanf("%s", a);
-    scanf("\n %c \n", &symbol);
-    scanf("%s", b);
-    bn *first = bn_new();
-    bn *second = bn_new();
-    bn *res = NULL;
-    bn_init_string(first, a);
-    bn_init_string(second, b);
-    if (symbol == '/') {
-        res = abs_bn_div(first, second);
+    int n;
+    scanf("%d", &n);
+    bn *a = bn_new(), *b = bn_new();
+    bn_init_int(a, 1);
+    bn_init_int(b, 1);
+    for (int i = 2; i < n; i++) {
+        abs_bn_add_to(a, b);
+        bn *temp = a;
+        a = b;
+        b = temp;
     }
-    char *otv = bn_to_string(res, 10);
-    printf("%s\n", otv);
-
-    free(otv);
-    free(a);
-    free(b);
-    bn_delete(first);
-    bn_delete(second);
-    bn_delete(res);
+    char *res = bn_to_string(b, 10);
+    printf("%s\n", res);
+    free(res);
+    bn_delete(a);
+    bn_delete(b);
     return 0;
 }
