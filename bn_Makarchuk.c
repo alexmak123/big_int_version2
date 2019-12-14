@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <malloc.h>
+//#include <malloc.h>
 #include <string.h>
 #include <locale.h>
 #include <assert.h>
@@ -10,7 +10,11 @@
 typedef struct bn_s bn;
 typedef unsigned int u_int;
 typedef unsigned long long int my_u_long;
-const int RADIX_2_MOD = 30;
+
+// numeric system
+const int MOD = 100000000;
+// max amount of digits in one cell of our massive body
+const int NUM_DIGITS = 8;
 
 struct bn_s {
     // our body
@@ -32,11 +36,6 @@ void increase_capacity (bn *a) {
     free(a -> body);
     a -> body = temp;
 }
-
-// numeric system
-const int MOD = 100000000;
-// max amount of digits in one cell of our massive body
-const int NUM_DIGITS = 8;
 
 u_int max_u_int(u_int a, u_int b) {
     if (a > b) {
@@ -62,6 +61,7 @@ int min_int(int a, int b) {
 int bn_delete(bn *t) {
     t -> size = 0;
     t -> is_neg = 0;
+    t -> capacity = 0;
     free(t -> body);
     t -> body = NULL;
     free(t);
@@ -75,16 +75,13 @@ void recalculate_bn_size(bn *t) {
         i--;
     }
     t -> size = i + 1;
-    /*if (t -> size == 0) {
-        t -> is_neg = 0;
-    }*/
 }
 
 // sets bigint value to zero
 void set_zero(bn *t) {
     t -> size = 0;
     t -> is_neg = 0;
-    for (int i = 0; i < t -> capacity - 1; i++) {
+    for (int i = 0; i < t -> capacity; i++) {
         t -> body[i] = 0;
     }
 }
@@ -138,14 +135,16 @@ bn *bn_new() {
 
 // copies content from orig into t
 // assumes that both bn have memory allocated
+// reallocates memory for t if not enough to fit orig
 void bn_copy(bn *t, bn const *orig) {
-    assert (t -> body != NULL);
+    assert(t -> body != NULL);
     set_zero(t);
     t -> is_neg = orig -> is_neg;
     t -> size = orig -> size;
     if (t -> capacity < orig -> size) {
         free(t -> body);
         u_int *temp = calloc(orig -> size, sizeof(u_int));
+        assert(t != NULL);
         t -> body = temp;
         t -> capacity = orig -> size;
     }
@@ -188,7 +187,7 @@ int bn_init_string(bn *t, const char *init_string) {
         return 0;
     }
     int p = strlen(init_string);
-    while (t -> capacity < p + 1) {
+    while (t -> capacity <= p) {
         increase_capacity(t);
     }
     int string_start = 0;
@@ -200,11 +199,6 @@ int bn_init_string(bn *t, const char *init_string) {
     }
     else {
         t -> is_neg = 0;
-    }
-
-    t -> size = p / NUM_DIGITS;
-    if (p % NUM_DIGITS != 0) {
-        t -> size += 1;
     }
 
     // string index - up to NUM_DIGITS before it belong to cell
@@ -227,73 +221,19 @@ int bn_init_string(bn *t, const char *init_string) {
         cell_i++;
     }
 
-    return 0;
-}
-
-// operation x += y by absolute value, ignores the sign
-// assumes that pointers are valid
-int abs_bn_add_to(bn *t, bn const *right) {
-    int additional_one = 0;
-    while (t -> capacity < max_int(t -> size, right -> size) + 2) {
-        increase_capacity(t);
-    }
-    int i = 0;
-    while (i < t -> size || i < right -> size) {
-        u_int digit = t -> body[i] + right -> body[i];
-        if (additional_one) {
-            digit++;
-        }
-        if (digit >= MOD) {
-            additional_one = 1;
-            digit -= MOD;
-        }
-        else {
-            additional_one = 0;
-        }
-        t -> body[i] = digit;
-        i++;
-    }
-    t -> size = i;
-    if (additional_one) {
-        t -> body[i] = 1;
-        t -> size++;
-    }
-    return 0;
-}
-
-// operation x -= y by absolute value, ignores the sign, |x| >= |y|
-// assumes that pointers are valid
-int abs_bn_sub_to(bn *t, bn const *right) {
-    int minus_one = 0;
-    while (t -> capacity < max_int(t -> size, right -> size) + 2) {
-        increase_capacity(t);
-    }
-    for (int i = 0; i < t -> size; i++) {
-        int digit = t -> body[i] - right -> body[i];
-        if (minus_one) {
-            digit--;
-        }
-        if (digit < 0) {
-            minus_one = 1;
-            digit += MOD;
-        }
-        else {
-            minus_one = 0;
-        }
-        t -> body[i] = (u_int)digit;
-    }
-    //resize excluding zeros
     recalculate_bn_size(t);
+
     return 0;
 }
 
 // compare by abs, if the left is less, return < 0; if equal, return 0; otherwise > 0
+// ignores sign
 int abs_bn_cmp(bn const *left, bn const *right) {
-    if (left -> size < right -> size) {
-        return -1;
-    }
-    else if (left -> size > right -> size) {
+    if (left -> size > right -> size) {
         return 1;
+    }
+    else if (left -> size < right -> size) {
+        return -1;
     }
     else {
         for (int i = min_int(left -> capacity, right -> capacity) - 1; i >= 0; i--) {
@@ -326,6 +266,70 @@ int bn_cmp(bn const *left, bn const *right) {
     else {
         return comp;
     }
+}
+
+// operation x += y by absolute value, ignores the sign
+// assumes that pointers are valid
+int abs_bn_add_to(bn *t, bn const *right) {
+    bn *temp = bn_init(right);
+    while (t -> capacity <= max_int(t -> size, right -> size) + 1) {
+        increase_capacity(t);
+    }
+    while (temp -> capacity <= max_int(t -> size, right -> size) + 1) {
+        increase_capacity(temp);
+    }
+    int additional_one = 0;
+    int i = 0;
+    while (i < t -> size || i < temp -> size) {
+        u_int digit = t -> body[i] + temp -> body[i];
+        if (additional_one) {
+            digit++;
+        }
+        if (digit >= MOD) {
+            additional_one = 1;
+            digit -= MOD;
+        }
+        else {
+            additional_one = 0;
+        }
+        t -> body[i] = digit;
+        i++;
+    }
+    t -> size = i;
+    if (additional_one) {
+        t -> body[i] = 1;
+        t -> size++;
+    }
+    bn_delete(temp);
+    return 0;
+}
+
+// operation x -= y by absolute value, ignores the sign, |x| >= |y|
+// assumes that pointers are valid
+int abs_bn_sub_to(bn *t, bn const *right) {
+    bn *temp = bn_init(right);
+    while (temp -> capacity < t -> capacity) {
+        increase_capacity(temp);
+    }
+    assert(abs_bn_cmp(t, temp) >= 0);
+    int minus_one = 0;
+    for (int i = 0; i < t -> size; i++) {
+        int digit = t -> body[i] - temp -> body[i];
+        if (minus_one) {
+            digit--;
+        }
+        if (digit < 0) {
+            minus_one = 1;
+            digit += MOD;
+        }
+        else {
+            minus_one = 0;
+        }
+        t -> body[i] = (u_int)digit;
+    }
+    recalculate_bn_size(t);
+    bn_delete(temp);
+    return 0;
 }
 
 // operation t += right
@@ -448,9 +452,9 @@ int bn_sign(bn const *t) {
     return 0;
 }
 
-/*// Raise the number to the degree degree
+// Raise the number to the degree degree
 int bn_pow_to(bn *t, int degree) {
-    while (t -> capacity < t -> size * degree) {
+    while (t -> capacity < 15000) {
         increase_capacity(t);
     }
     bn *one = bn_new();
@@ -483,6 +487,7 @@ int bn_root_to(bn *t, int reciprocal) {
         bn *mid = bn_add(lower, upper);
         abs_divide_by_int(mid, 2);
         bn *mid_plus_one = bn_add(mid, one);
+
         bn* pow_mid = bn_init(mid);
         bn_pow_to(pow_mid, reciprocal);
         bn* pow_mid_plus_one = bn_init(mid_plus_one);
@@ -519,7 +524,7 @@ int bn_root_to(bn *t, int reciprocal) {
     bn_delete(one);
     bn_delete(ans);
     return 0;
-}*/
+}
 
 void reverse_string(char *s, int size) {
     for (int i = 0; 2 * i < size; i++) {
@@ -530,7 +535,7 @@ void reverse_string(char *s, int size) {
 }
 
 // returns a string representation of bn
-char *bn_to_string(const bn *const_t, int radix) {
+const char *bn_to_string(const bn *const_t, int radix) {
     assert(2 <= radix && radix <= 36);
 
     if (const_t -> size == 0) {
@@ -610,14 +615,15 @@ int bn_init_string_radix(bn *t, const char *init_string, int radix) {
     return 0;
 }
 
-/*
 // operation x = x * MOD + cell
 void shift_and_append_cell(bn *x, u_int cell) {
-    assert(x -> size < x -> capacity);
+    assert(x -> size <= x -> capacity);
+    if (x -> size == x -> capacity) {
+        increase_capacity(x);
+    }
     if (x -> size == 0) {
         x -> is_neg = 0;
     }
-
     for (int i = x -> size; i >= 1; i--) {
         x -> body[i] = x -> body[i - 1];
     }
@@ -756,34 +762,5 @@ int bn_mod_to(bn *t, bn const *right) {
     bn_copy(t, temp);
     bn_delete(temp);
     return 0;
-}*/
-
-
-int main()
-{
-    char *a = malloc(sizeof(char) * 100000);
-    char *b = malloc(sizeof(char) * 100000);
-    char symbol;
-    scanf("%s", a);
-    scanf("\n %c \n", &symbol);
-    scanf("%s", b);
-    bn *first = bn_new();
-    bn *second = bn_new();
-    bn *res = first;
-    bn_init_string(first, a);
-    bn_init_string(second, b);
-    if (symbol == '*') {
-        res = bn_mul(first, second);
-    }
-    char *otv = bn_to_string(res, 10);
-    printf("%s\n", otv);
-    if (res -> size != 0) {
-        free(otv);
-    }
-    free(a);
-    free(b);
-    bn_delete(first);
-    bn_delete(second);
-    bn_delete(res);
-    return 0;
 }
+
